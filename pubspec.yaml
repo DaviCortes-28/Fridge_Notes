@@ -1,0 +1,47 @@
+name: fridge_notes
+description: "FridgeNotes - geladeira digital compartilhada (trabalho acadêmico Flutter + Firebase)."
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.6
+
+  # Firebase
+  firebase_core: ^3.6.0
+  firebase_auth: ^5.3.1
+  cloud_firestore: ^5.4.4
+
+  # Persistência local (Prioridade 9)
+  shared_preferences: ^2.3.2
+
+  # Formatação de datas (usado nos post-its e comentários)
+  intl: ^0.19.0
+
+  # Efeitos sonoros (Prioridade 12) - opcional, o app funciona sem os arquivos de áudio
+  audioplayers: ^6.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  # Descomente e ajuste depois de adicionar os arquivos de som reais em
+  # assets/sounds/ (veja assets/sounds/README.txt). Deixamos comentado
+  # de propósito: se o pubspec apontar para arquivos que não existem,
+  # o `flutter pub get` / build falha.
+  #
+  # assets:
+  #   - assets/sounds/door_open.mp3
+  #   - assets/sounds/door_close.mp3
+  #   - assets/sounds/paper.mp3
+  #   - assets/sounds/magnet.mp3
+  #   - assets/sounds/confirm.mp3
+  #   - assets/sounds/notification.mp3

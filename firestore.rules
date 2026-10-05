@@ -1,0 +1,104 @@
+rules_version = '2';
+
+// Regras de segurança do FridgeNotes.
+//
+// Resumo (para explicar na apresentação):
+// - Só usuários autenticados podem ler/escrever qualquer coisa.
+// - Uma geladeira só pode ser lida/editada por quem é membro dela.
+// - Post-its e comentários seguem a mesma regra: precisa ser membro
+//   da geladeira onde eles estão.
+// - Cada um só pode criar post-its/comentários "em nome de si mesmo"
+//   (authorId tem que ser o próprio uid autenticado).
+// - Excluir um post-it ou comentário só é permitido para o autor ou
+//   para o dono da geladeira.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function fridgeData(fridgeId) {
+      return get(/databases/$(database)/documents/fridges/$(fridgeId)).data;
+    }
+
+    function isMember(fridgeId) {
+      return isSignedIn() && request.auth.uid in fridgeData(fridgeId).members;
+    }
+
+    function isOwner(fridgeId) {
+      return isSignedIn() && request.auth.uid == fridgeData(fridgeId).ownerId;
+    }
+
+    // ---------------- USERS ----------------
+    match /users/{userId} {
+      // Qualquer usuário logado pode ler nomes de outros usuários
+      // (necessário para mostrar autor de post-its/comentários e a
+      // lista de membros de uma geladeira).
+      allow read: if isSignedIn();
+      // Só o próprio usuário pode criar/editar seu documento.
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // ---------------- FRIDGES ----------------
+    match /fridges/{fridgeId} {
+      // IMPORTANTE: aqui usamos resource.data diretamente (documento que
+      // já está sendo avaliado), e não a função isMember/isOwner (que faz
+      // um get() extra). Isso é o que permite ao Firestore validar a
+      // consulta `where('members', arrayContains: uid)` da Home — usar
+      // get() aqui faz o Firestore negar a consulta inteira, mesmo que
+      // o resultado devesse ser permitido.
+      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+
+      // Qualquer usuário logado pode criar uma geladeira, desde que
+      // se coloque como dono e membro inicial.
+      allow create: if isSignedIn()
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.members.hasOnly([request.auth.uid]);
+
+      // "Entrar em uma geladeira" só altera o campo `members` (arrayUnion),
+      // então liberamos isso para qualquer usuário autenticado. Qualquer
+      // outra alteração (nome, tema, etc.) só pode ser feita pelo dono.
+      allow update: if isSignedIn() && (
+        request.auth.uid == resource.data.ownerId ||
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['members'])
+      );
+
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.ownerId;
+
+      // ---------------- POST-ITS (subcoleção) ----------------
+      match /postIts/{postItId} {
+        allow read: if isMember(fridgeId);
+
+        allow create: if isMember(fridgeId)
+          && request.resource.data.authorId == request.auth.uid;
+
+        // Simplificado para fins didáticos: qualquer membro pode
+        // atualizar (necessário para "concluir" um post-it de outra
+        // pessoa). Se quiser restringir edição de conteúdo (título,
+        // descrição) só ao autor, isso é reforçado na própria interface.
+        allow update: if isMember(fridgeId);
+
+        allow delete: if isMember(fridgeId) && (
+          resource.data.authorId == request.auth.uid || isOwner(fridgeId)
+        );
+
+        // ---------------- COMMENTS (subcoleção) ----------------
+        match /comments/{commentId} {
+          allow read: if isMember(fridgeId);
+
+          allow create: if isMember(fridgeId)
+            && request.resource.data.authorId == request.auth.uid;
+
+          allow update: if false; // comentários não são editáveis
+
+          allow delete: if isMember(fridgeId) && (
+            resource.data.authorId == request.auth.uid || isOwner(fridgeId)
+          );
+        }
+      }
+    }
+  }
+}
