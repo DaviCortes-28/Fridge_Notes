@@ -44,13 +44,24 @@ service cloud.firestore {
 
     // ---------------- FRIDGES ----------------
     match /fridges/{fridgeId} {
-      // IMPORTANTE: aqui usamos resource.data diretamente (documento que
-      // já está sendo avaliado), e não a função isMember/isOwner (que faz
-      // um get() extra). Isso é o que permite ao Firestore validar a
-      // consulta `where('members', arrayContains: uid)` da Home — usar
-      // get() aqui faz o Firestore negar a consulta inteira, mesmo que
-      // o resultado devesse ser permitido.
-      allow read: if isSignedIn() && request.auth.uid in resource.data.members;
+      // "get" x "list" são operações diferentes para o Firestore:
+      // - get = buscar 1 documento específico, já sabendo o ID.
+      // - list = consultar/vasculhar a coleção (com where, por exemplo).
+      //
+      // GET fica liberado pra qualquer usuário logado: é assim que
+      // "entrar com código" funciona (o ID do documento é o próprio
+      // código — ver FirestoreService.createFridge/joinFridgeByCode).
+      // Só saber o ID exato (o código) já é a prova de acesso.
+      allow get: if isSignedIn();
+
+      // LIST continua exigindo ser membro — é o que impede alguém de
+      // simplesmente listar/vasculhar TODAS as geladeiras existentes.
+      // Aqui usamos resource.data diretamente (documento que já está
+      // sendo avaliado), e não a função isMember (que faz um get()
+      // extra): isso é o que permite ao Firestore validar a consulta
+      // `where('members', arrayContains: uid)` da Home — usar get()
+      // aqui faria o Firestore negar a consulta inteira.
+      allow list: if isSignedIn() && request.auth.uid in resource.data.members;
 
       // Qualquer usuário logado pode criar uma geladeira, desde que
       // se coloque como dono e membro inicial.

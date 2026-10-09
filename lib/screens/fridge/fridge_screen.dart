@@ -14,10 +14,6 @@ import '../post_it/create_post_it_screen.dart';
 import '../post_it/edit_post_it_screen.dart';
 import 'fridge_settings_screen.dart';
 
-/// Filtros disponíveis no mural (PRIORIDADE 8 — consultas/filtros reais
-/// no Firestore, não filtragem local de uma lista já carregada).
-enum PostItFilter { all, pending, mine }
-
 class FridgeScreen extends StatefulWidget {
   final String fridgeId;
 
@@ -32,8 +28,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
   final _authService = AuthService();
   final _preferencesService = PreferencesService();
   final _soundService = SoundService();
-
-  PostItFilter _filter = PostItFilter.all;
 
   @override
   void initState() {
@@ -50,17 +44,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
     // PRIORIDADE 12: som de "fechar a porta" ao sair da tela da geladeira.
     _soundService.playDoorClose();
     super.dispose();
-  }
-
-  Stream<List<PostItModel>> _postItsStream(String uid) {
-    switch (_filter) {
-      case PostItFilter.all:
-        return _firestoreService.watchAllPostIts(widget.fridgeId);
-      case PostItFilter.pending:
-        return _firestoreService.watchPendingPostIts(widget.fridgeId);
-      case PostItFilter.mine:
-        return _firestoreService.watchMyPostIts(widget.fridgeId, uid);
-    }
   }
 
   Future<void> _showMembers(FridgeModel fridge) async {
@@ -140,12 +123,8 @@ class _FridgeScreenState extends State<FridgeScreen> {
               handleColor: Colors.grey[200]!,
               child: _buildShelfBackground(
                 theme,
-                child: Column(
-                  children: [
-                    _buildFilterBar(),
-                    Expanded(
-                      child: StreamBuilder<List<PostItModel>>(
-                        stream: _postItsStream(uid),
+                child: StreamBuilder<List<PostItModel>>(
+                        stream: _firestoreService.watchAllPostIts(widget.fridgeId),
                         builder: (context, snapshot) {
                         if (snapshot.connectionState == ConnectionState.waiting) {
                           return const Center(child: CircularProgressIndicator());
@@ -160,9 +139,7 @@ class _FridgeScreenState extends State<FridgeScreen> {
                             child: Padding(
                               padding: const EdgeInsets.all(24),
                               child: Text(
-                                _filter == PostItFilter.all
-                                    ? '🧊 Sua geladeira está vazia.\nAdicione seu primeiro lembrete!'
-                                    : '🧊 Nenhum post-it encontrado com esse filtro.',
+                                '🧊 Sua geladeira está vazia.\nAdicione seu primeiro lembrete!',
                                 textAlign: TextAlign.center,
                                 style: Theme.of(context).textTheme.bodyLarge,
                               ),
@@ -202,9 +179,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
                         );
                       },
                     ),
-                  ),
-                ],
-              ),
               ),
             ),
             floatingActionButton: FloatingActionButton.extended(
@@ -220,32 +194,6 @@ class _FridgeScreenState extends State<FridgeScreen> {
             ),
           );
         },
-    );
-  }
-
-  Widget _buildFilterBar() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Wrap(
-        spacing: 8,
-        children: [
-          ChoiceChip(
-            label: const Text('Todos'),
-            selected: _filter == PostItFilter.all,
-            onSelected: (_) => setState(() => _filter = PostItFilter.all),
-          ),
-          ChoiceChip(
-            label: const Text('Pendentes'),
-            selected: _filter == PostItFilter.pending,
-            onSelected: (_) => setState(() => _filter = PostItFilter.pending),
-          ),
-          ChoiceChip(
-            label: const Text('Meus post-its'),
-            selected: _filter == PostItFilter.mine,
-            onSelected: (_) => setState(() => _filter = PostItFilter.mine),
-          ),
-        ],
-      ),
     );
   }
 

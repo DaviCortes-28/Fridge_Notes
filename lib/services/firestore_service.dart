@@ -74,16 +74,24 @@ class FirestoreService {
 
   /// Cria uma nova geladeira e devolve o ID gerado.
   ///
-  /// Também gera um código de convite aleatório de 6 caracteres
-  /// (ex: "8F4K2A") usado por outros usuários para entrar na geladeira.
+  /// Gera um código de convite aleatório de 6 caracteres (ex: "8F4K2A")
+  /// e usa ESSE CÓDIGO como o próprio ID do documento — em vez de deixar
+  /// o Firestore gerar um ID automático e guardar o código só como um
+  /// campo. Isso é o que permite "entrar com código" funcionar sem
+  /// precisar de uma consulta (que as regras de segurança bloqueariam
+  /// para quem ainda não é membro): vira uma busca direta por ID.
+  /// Colisão de código é praticamente impossível (mais de 1 bilhão de
+  /// combinações possíveis com o alfabeto usado) — num app de produção
+  /// de verdade isso seria tratado com uma transação e nova tentativa.
   Future<FridgeModel> createFridge({
     required String name,
     required String ownerId,
     String theme = 'classic',
   }) async {
     final inviteCode = _generateInviteCode();
+    final docRef = _fridgesRef.doc(inviteCode);
 
-    final docRef = await _fridgesRef.add({
+    await docRef.set({
       'name': name,
       'ownerId': ownerId,
       'theme': theme,
@@ -102,8 +110,13 @@ class FirestoreService {
     return List.generate(6, (_) => chars[rnd.nextInt(chars.length)]).join();
   }
 
-  /// Consulta ao Firestore pelo código de convite e adiciona o usuário
-  /// aos membros da geladeira encontrada.
+  /// Busca a geladeira pelo código de convite e adiciona o usuário aos
+  /// membros dela.
+  ///
+  /// Como o ID do documento É o código de convite (ver [createFridge]),
+  /// isso é uma busca direta por ID (operação "get"), não uma consulta
+  /// (operação "list") — é essa diferença que faz a regra de segurança
+  /// permitir a busca mesmo para quem ainda não é membro.
   ///
   /// Lança uma [Exception] com mensagem amigável se o código não existir.
   Future<FridgeModel> joinFridgeByCode({
@@ -111,23 +124,18 @@ class FirestoreService {
     required String userId,
   }) async {
     final normalized = code.trim().toUpperCase();
+    final docRef = _fridgesRef.doc(normalized);
 
-    final query = await _fridgesRef
-        .where('inviteCode', isEqualTo: normalized)
-        .limit(1)
-        .get();
-
-    if (query.docs.isEmpty) {
+    final doc = await docRef.get();
+    if (!doc.exists) {
       throw Exception('Nenhuma geladeira encontrada com esse código.');
     }
 
-    final doc = query.docs.first;
-
-    await doc.reference.update({
+    await docRef.update({
       'members': FieldValue.arrayUnion([userId]),
     });
 
-    final updated = await doc.reference.get();
+    final updated = await docRef.get();
     return FridgeModel.fromMap(updated.id, updated.data()!);
   }
 
